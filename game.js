@@ -297,7 +297,7 @@ function showChoices(title, choices) {
 function moveMenu() {
   const destinations = Game.flags.locationsUnlocked ? Object.keys(Places) : ["904教室"];
   const choices = destinations.filter((place) => place !== Game.place);
-  if (!choices.length) return showText("現場を離れる前に、凶器を確保しよう。");
+  if (!choices.length) return showText("現場を離れる前にやるべきことがある");
   showChoices("移動先を選んでください。", choices
     .map((place) => ({ label: place, action: () => movePlace(place) })));
 }
@@ -308,7 +308,7 @@ function movePlace(place) {
   startBgm(place === "904教室" ? "scene904" : "game");
   if (place === "904教室" && !Game.flags.bodyFound) {
     Game.flags.bodyFound = true;
-    showText("床には智恵蔵が倒れている。\n月岡「なんてことだ！智恵蔵が！」\n体は血に染まりその顔は明らかに命を宿していなかった。\n月岡「智恵蔵が……殺された……」\nまずは現場を調べよう。");
+    showText("床には智恵蔵が倒れている。\n月岡「なんてことだっ！智恵蔵がっ！」\n体は血に染まりその顔は明らかに命を宿していなかった。\n月岡「智恵蔵が……殺された……」\nまずは現場を調べよう。");
     return;
   }
   const entrances = {
@@ -493,7 +493,7 @@ function showItem(person, item) {
       Game.flags.sekizawaUsbShown = true;
       return showText(line, null, stopSekizawaTalking);
     }
-    const line = Game.flags.sekizawaCutterShown ? "すみません、みたくないです。血が苦手なので……" : "関澤「それって……興味ですか……？」";
+    const line = Game.flags.sekizawaCutterShown ? "すみません、みたくないです。血が苦手なので……" : "関澤「それって……凶器ですか……？」";
     Game.flags.sekizawaCutterShown = true;
     return showText(line, null, stopSekizawaTalking);
   }
@@ -551,9 +551,9 @@ function updateAccuseCommand() {
 
 function accuse() {
   if (Game.place !== "801教室") return showText("関澤をこくはつしよう");
-  if (!Game.flags.usbRead) return showText("告発するにはまだ証拠がない");
+  if (!Game.flags.usbRead) return showText("こくはつするにはまだ証拠がない");
   startSekizawaTalking();
-  showText("月岡「お前が智恵蔵を殺したんだな」\n月岡「証拠は見つけた。この横領の裏帳簿、これが動機だ」\n関澤「……」\n関澤は諦めた様子で語り出した。\n関澤「……801教室でハレパネを切る作業をしていた時に智恵先生に呼び出されました」\n関澤「その時カッターを持ったまま904教室に行ったんです」\n関澤「殺すつもりはなかったんです……」\n関澤「……智恵先生に裏帳簿のことがバレて」\n関澤「もう訳がわからなくて、気がついたら……」\n関澤「智恵先生が目の前で倒れていました……」\n月岡「お前、その後801にいたのはこれを探していたな？」\n赤いUSBを関澤に突きつけた\n月岡「智恵蔵を殺したあげくに横領の証拠を探していたんだ」\n月岡「お前は救いのないことをした……この馬鹿野郎がっ！」\n関澤はもうしゃべることなくただうなだれてれていた。\n遠くからパトカーのサイレンが聞こえる。\nこうして、一夜の事件は関澤の逮捕によって幕を閉じた", showCredits, stopSekizawaTalking);
+  showText("月岡「お前が智恵蔵を殺したんだなっ」\n月岡「証拠は見つけた。この横領の裏帳簿、これが動機だあっ」\n関澤「……」\n関澤は諦めた様子で語り出した。\n関澤「……801教室でハレパネを切る作業をしていた時に智恵先生に呼び出されました」\n関澤「その時カッターを持ったまま904教室に行ったんです」\n関澤「殺すつもりはなかったんです……」\n関澤「……智恵先生に裏帳簿のことがバレて」\n関澤「もう訳がわからなくて、気がついたら……」\n関澤「智恵先生が目の前で倒れていました……」\n月岡「お前、その後801にいたのはこれを探していたからだな？」\n赤いUSBを関澤に突きつけた\n月岡「智恵蔵を殺したあげくに横領の証拠を隠滅しようとしていたんだっ」\n月岡「お前は救いのないことをした……この馬鹿野郎がっ！」\n関澤はもうしゃべることなくただうなだれてれていた。\n遠くからパトカーのサイレンが聞こえる。\nこうして、一夜の事件は関澤の逮捕によって幕を閉じた", showCredits, stopSekizawaTalking);
 }
 
 function showCredits() {
@@ -569,7 +569,7 @@ function startGame() {
   updatePlace();
   startBgm("game");
   showText("2026年冬。東京デザイナー・アカデミー。\n卒業制作の搬入まで、あと一週間。\n深夜の職員室で、学科長の月岡正明は一人、提出データを確認していた。\n月岡「みんないないな、どこ行ったんだろ…」\nグラフィックデザイン学科には5名スタッフがいるが、全員残業の真っ最中だった。", () => {
-    showText("――智恵蔵の携帯から、電話が鳴った。\n智恵蔵『904教室に……きて……』声は非常に掠れていたが聞き覚えのある智恵蔵の声だった。途切れた声を最後に、通話は切れた。\n月岡「904教室に行ってみなくては！」");
+    showText("――智恵蔵の携帯から、電話が鳴った。\n智恵蔵『904教室に……きて……』声は非常に掠れていたが聞き覚えのある智恵蔵の声だった。途切れた声を最後に、通話は切れた。\n月岡「904教室に行ってみなくてはっ！」");
   });
 }
 
