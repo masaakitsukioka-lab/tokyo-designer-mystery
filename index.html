@@ -64,30 +64,22 @@ text-align:center;
 
 padding-top:70px;
 
+background:#000;
+
 }
 
 
 .logo{
 
-width:600px;
+width:760px;
 
-height:180px;
+height:auto;
 
 margin:auto;
 
-border:4px solid white;
+display:block;
 
-display:flex;
-
-align-items:center;
-
-justify-content:center;
-
-font-size:38px;
-
-line-height:1.5;
-
-background:#222;
+image-rendering:pixelated;
 
 }
 
@@ -115,29 +107,6 @@ margin-top:80px;
 font-size:14px;
 
 }
-
-.bgmToggle{
-
-margin-top:24px;
-padding:7px 14px;
-border:2px solid white;
-background:#111;
-color:white;
-font:inherit;
-font-size:15px;
-cursor:pointer;
-
-}
-
-.bgmToggle:hover,
-.bgmToggle:focus{
-
-color:#ffff00;
-border-color:#ffff00;
-
-}
-
-
 
 @keyframes blink{
 
@@ -267,16 +236,6 @@ padding:14px;
 }
 
 
-.location{
-
-font-size:18px;
-
-margin-bottom:10px;
-
-}
-
-
-
 .image{
 
 height:220px;
@@ -313,7 +272,7 @@ line-height:1.8;
 
 white-space:pre-line;
 
-overflow:auto;
+overflow:hidden;
 
 }
 
@@ -351,6 +310,12 @@ opacity:0;
 
 height:440px;
 
+aspect-ratio:1448 / 1086;
+
+width:auto;
+
+margin:0 auto;
+
 border:3px solid white;
 
 display:flex;
@@ -371,9 +336,11 @@ overflow:hidden;
 
 #sceneImage{
 
-max-width:100%;
+width:100%;
 
-max-height:100%;
+height:100%;
+
+object-fit:cover;
 
 image-rendering:pixelated;
 
@@ -402,6 +369,21 @@ object-position:center bottom;
 image-rendering:pixelated;
 
 pointer-events:none;
+
+}
+
+/* 人物ごとの表示サイズ。足元を基準に拡大・縮小する。 */
+.characterSprite[data-character="hou"]{
+
+transform:scale(0.9);
+transform-origin:center bottom;
+
+}
+
+.characterSprite[data-character="kimura"]{
+
+transform:scale(1.2);
+transform-origin:center bottom;
 
 }
 
@@ -474,15 +456,32 @@ flex-direction:column;
 align-items:center;
 justify-content:center;
 text-align:center;
-font-size:24px;
-line-height:2;
+padding:24px;
+font-size:16px;
+line-height:1.3;
 animation:creditsFade 2s ease-in;
+overflow:hidden;
 
 }
 
 .credits p:nth-child(2){
 
-font-size:34px;
+font-size:22px;
+color:#ffff00;
+
+}
+
+.credits p{
+
+margin:4px 0;
+
+}
+
+.credits p:last-child{
+
+margin-top:16px;
+font-size:48px;
+line-height:1;
 color:#ffff00;
 
 }
@@ -508,14 +507,9 @@ to{ opacity:1; }
 
 <div id="title">
 
+<audio id="titleBgm" src="audio/title.mp3" loop autoplay preload="auto"></audio>
 
-<div class="logo">
-
-東京デザイナー・アカデミー<br>
-
-殺人事件
-
-</div>
+<img class="logo" src="images/title.png" alt="東京デザイナー・アカデミー殺人事件">
 
 
 
@@ -524,10 +518,6 @@ to{ opacity:1; }
 ▶ START
 
 </div>
-
-<button class="bgmToggle" type="button">♪ BGMを鳴らす</button>
-
-
 
 <div class="copy">
 
@@ -594,13 +584,6 @@ to{ opacity:1; }
 
 
 <div class="scene">
-
-
-<div class="location" id="location">
-
-場所：職員室
-
-</div>
 
 
 <div class="imageArea">

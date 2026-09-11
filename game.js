@@ -42,8 +42,13 @@ const Places = {
   "学生ホール": { image: "images/hall.png", people: [], items: ["学生ホール"] }
 };
 
+const CharacterSprites = {
+  "関澤遼": { id: "sekizawa", place: "801教室", idle: "images/sekizawa_01.png", talking: "images/sekizawa_02.png", alt: "801教室にいる関澤遼" },
+  "侯宇帆": { id: "hou", place: "901シルク室", idle: "images/hou_01.png", talking: "images/hou_02.png", alt: "901シルク室にいる侯宇帆" },
+  "木村友紀子": { id: "kimura", place: "学生ホール", idle: "images/kimura_03.png", talking: "images/kimura_04.png", alt: "学生ホールにいる木村友紀子", visible: () => Game.flags.kimuraUnlocked }
+};
+
 const message = () => document.getElementById("message");
-const locationLabel = () => document.getElementById("location");
 const visual = () => document.getElementById("image");
 const sceneImage = () => document.getElementById("sceneImage");
 const characterSprite = () => document.getElementById("characterSprite");
@@ -52,9 +57,14 @@ let typing = false;
 let timer = null;
 let next = null;
 let typingComplete = null;
-let sekizawaTalkTimer = null;
-let sekizawaMouthOpen = false;
+let characterTalkTimer = null;
+let characterMouthOpen = false;
 let commandMenuOpen = false;
+
+// 人物追加時も、この間隔で開口・閉口画像を切り替える。
+const MOUTH_FLAP_INTERVAL_MS = 500;
+const MESSAGE_PAGE_MAX_COLUMNS = 48;
+const MESSAGE_PAGE_MAX_LINES = 6;
 
 // 音声ファイルなしで鳴らす、矩形波のチップチューンBGM。
 let audioContext = null;
@@ -62,7 +72,6 @@ let bgmTimer = null;
 let bgmStep = 0;
 let nextNoteTime = 0;
 let currentTrack = null;
-let bgmEnabled = false;
 const activeOscillators = new Set();
 
 const NOTE = {
@@ -72,11 +81,6 @@ const NOTE = {
 };
 
 const BGM = {
-  title: {
-    beat: 0.22,
-    melody: ["D5", null, "A4", "D5", "F4", null, "E4", null, "D5", null, "C5", "A4", "G4", null, "A4", null],
-    bass: ["D3", null, null, null, "C3", null, null, null, "F3", null, null, null, "A3", null, "A3", null]
-  },
   game: {
     beat: 0.17,
     melody: ["D5", null, "A4", "F4", "E4", null, "D4", null, "D5", null, "C5", "A4", "G4", "F4", "E4", null],
@@ -134,8 +138,22 @@ function stopBgm() {
   activeOscillators.clear();
 }
 
+function startTitleBgm() {
+  const titleBgm = document.getElementById("titleBgm");
+  if (!titleBgm || Game.started) return;
+  titleBgm.play().catch(() => {
+    // ブラウザが自動再生を制限した場合は、次のタイトル画面クリックで再生する。
+  });
+}
+
+function stopTitleBgm() {
+  const titleBgm = document.getElementById("titleBgm");
+  if (!titleBgm) return;
+  titleBgm.pause();
+  titleBgm.currentTime = 0;
+}
+
 async function startBgm(trackName) {
-  if (!bgmEnabled) return;
   await enableAudio();
   if (currentTrack === trackName && bgmTimer) return;
   stopBgm();
@@ -146,36 +164,63 @@ async function startBgm(trackName) {
   bgmTimer = setInterval(scheduleBgmNotes, 50);
 }
 
-function updateBgmButton() {
-  const button = document.querySelector(".bgmToggle");
-  if (button) button.textContent = bgmEnabled ? "♪ BGM: ON" : "♪ BGM: OFF";
-}
-
 function clearTyping() {
   if (timer) clearInterval(timer);
   timer = null;
   typing = false;
 }
 
+function splitMessageIntoPages(text) {
+  const lines = [];
+  String(text).split("\n").forEach((sourceLine) => {
+    if (!sourceLine) {
+      lines.push("");
+      return;
+    }
+    for (let offset = 0; offset < sourceLine.length; offset += MESSAGE_PAGE_MAX_COLUMNS) {
+      lines.push(sourceLine.slice(offset, offset + MESSAGE_PAGE_MAX_COLUMNS));
+    }
+  });
+  const pages = [];
+  for (let index = 0; index < lines.length; index += MESSAGE_PAGE_MAX_LINES) {
+    pages.push(lines.slice(index, index + MESSAGE_PAGE_MAX_LINES).join("\n"));
+  }
+  return pages.length ? pages : [""];
+}
+
+function appendCursor(box) {
+  const cursor = document.createElement("span");
+  cursor.className = "cursor";
+  cursor.textContent = "▼";
+  box.appendChild(cursor);
+}
+
 function typeText(text, callback, onComplete) {
   clearTyping();
   const box = message();
-  box.textContent = "";
-  next = callback || null;
+  const pages = splitMessageIntoPages(String(text).replaceAll("名前：", ""));
   typingComplete = onComplete || null;
-  let index = 0;
-  typing = true;
-  timer = setInterval(() => {
-    box.textContent += text[index] || "";
-    index += 1;
-    if (index >= text.length) {
-      clearTyping();
-      if (next) box.textContent += "\n\n▼ クリックで進む";
-      const complete = typingComplete;
-      typingComplete = null;
-      if (complete) complete();
-    }
-  }, 18);
+  const typePage = (pageIndex) => {
+    box.textContent = "";
+    let index = 0;
+    typing = true;
+    timer = setInterval(() => {
+      box.textContent += pages[pageIndex][index] || "";
+      index += 1;
+      if (index >= pages[pageIndex].length) {
+        clearTyping();
+        const hasAnotherPage = pageIndex < pages.length - 1;
+        next = hasAnotherPage ? () => typePage(pageIndex + 1) : callback || null;
+        if (next) appendCursor(box);
+        if (!hasAnotherPage) {
+          const complete = typingComplete;
+          typingComplete = null;
+          if (complete) complete();
+        }
+      }
+    }, 18);
+  };
+  typePage(0);
 }
 
 function showText(text, callback, onComplete) {
@@ -184,7 +229,6 @@ function showText(text, callback, onComplete) {
 }
 
 function updatePlace() {
-  locationLabel().textContent = `場所：${Game.place}`;
   const place = Places[Game.place];
   visual().textContent = `▣ ${Game.place}\n画像準備中`;
   const img = sceneImage();
@@ -197,34 +241,46 @@ function updatePlace() {
 
 function updateCharacterSprite() {
   const sprite = characterSprite();
-  stopSekizawaTalking();
-  if (Game.place !== "801教室") {
+  stopCharacterTalking();
+  const character = currentPlaceCharacter();
+  if (!character) {
     sprite.style.display = "none";
     sprite.removeAttribute("src");
+    delete sprite.dataset.character;
     return;
   }
-  sprite.src = "images/sekizawa_01.png";
-  sprite.alt = "801教室にいる関澤遼";
+  sprite.src = character.idle;
+  sprite.alt = character.alt;
+  sprite.dataset.character = character.id;
   sprite.style.display = "block";
 }
 
-function startSekizawaTalking() {
-  if (Game.place !== "801教室") return;
-  stopSekizawaTalking();
-  const sprite = characterSprite();
-  sekizawaMouthOpen = true;
-  sprite.src = "images/sekizawa_02.png";
-  sekizawaTalkTimer = setInterval(() => {
-    sekizawaMouthOpen = !sekizawaMouthOpen;
-    sprite.src = sekizawaMouthOpen ? "images/sekizawa_02.png" : "images/sekizawa_01.png";
-  }, 1000);
+function currentPlaceCharacter() {
+  return Object.values(CharacterSprites).find((character) =>
+    character.place === Game.place && (!character.visible || character.visible())
+  );
 }
 
-function stopSekizawaTalking() {
-  if (sekizawaTalkTimer) clearInterval(sekizawaTalkTimer);
-  sekizawaTalkTimer = null;
-  sekizawaMouthOpen = false;
-  if (Game.place === "801教室") characterSprite().src = "images/sekizawa_01.png";
+function startCharacterTalking(person) {
+  const character = CharacterSprites[person];
+  if (!character || currentPlaceCharacter() !== character) return;
+  stopCharacterTalking();
+  const sprite = characterSprite();
+  sprite.dataset.character = character.id;
+  characterMouthOpen = true;
+  sprite.src = character.talking;
+  characterTalkTimer = setInterval(() => {
+    characterMouthOpen = !characterMouthOpen;
+    sprite.src = characterMouthOpen ? character.talking : character.idle;
+  }, MOUTH_FLAP_INTERVAL_MS);
+}
+
+function stopCharacterTalking() {
+  if (characterTalkTimer) clearInterval(characterTalkTimer);
+  characterTalkTimer = null;
+  characterMouthOpen = false;
+  const character = currentPlaceCharacter();
+  if (character) characterSprite().src = character.idle;
 }
 
 function commands() {
@@ -253,7 +309,7 @@ function renderCommandList() {
     ["とる", takeMenu],
     ["さがす", findMenu]
   ];
-  if (Game.flags.kimuraTestimony && Game.flags.cutterFound) commandList.push(["こくはつする", accuse]);
+  if (Game.flags.kimuraTestimony && Game.place === "801教室") commandList.push(["こくはつする", accuse]);
   commandList.forEach(([label, action]) => {
     const button = document.createElement("button");
     button.className = "command";
@@ -297,8 +353,8 @@ function showChoices(title, choices) {
 function moveMenu() {
   const destinations = Game.flags.locationsUnlocked ? Object.keys(Places) : ["904教室"];
   const choices = destinations.filter((place) => place !== Game.place);
-  if (!choices.length) return showText("現場を離れる前にやるべきことがある");
-  showChoices("移動先を選んでください。", choices
+  if (!choices.length) return showText("現場の調査が先だ！");
+  showChoices("いどうさき", choices
     .map((place) => ({ label: place, action: () => movePlace(place) })));
 }
 
@@ -327,7 +383,7 @@ function talkMenu() {
   if (Game.place === "職員室") return showText("ここには誰もいない");
   const topics = ["智恵蔵のこと", "侯宇帆のこと", "関澤のこと", "木村のこと", "気づいたこと"];
   showChoices("誰に何を聞きますか？", people.flatMap((person) => topics.map((topic) => ({
-    label: `${person}：${topic}`,
+    label: topic,
     action: () => talkPerson(person, topic)
   }))));
 }
@@ -335,7 +391,7 @@ function talkMenu() {
 function talkPerson(person, topic) {
   if (person === "関澤遼") {
     Game.flags.sekizawaTalk = true;
-    startSekizawaTalking();
+    startCharacterTalking(person);
     if (Game.flags.kimuraTestimony) {
       const afterTestimony = {
         "智恵蔵のこと": "関澤「僕は何も知りません」",
@@ -344,7 +400,7 @@ function talkPerson(person, topic) {
         "木村のこと": "関澤「木村さん、いたんですか？」",
         "気づいたこと": "関澤「…………………………」"
       };
-      showText(afterTestimony[topic] === "僕は何も知りません" ? "関澤「僕は何も知りません」" : afterTestimony[topic], null, stopSekizawaTalking);
+      showText(afterTestimony[topic] === "僕は何も知りません" ? "関澤「僕は何も知りません」" : afterTestimony[topic], null, stopCharacterTalking);
       return;
     }
     let line;
@@ -357,12 +413,13 @@ function talkPerson(person, topic) {
     } else if (topic === "関澤のこと") line = "関澤「ぼくは801でずっと卒制の準備をしていました…。智恵先生には会っていません」";
     else if (topic === "木村のこと") line = "関澤「木村さん、しばらく見かけてないんですよね……いるはずなんですが。\n関澤「月岡先生、木村さんどこにいるかご存知ないですか？」";
     else line = "いえ、特には……";
-    showText(line, null, stopSekizawaTalking);
+    showText(line, null, stopCharacterTalking);
     checkKimura();
     return;
   }
   if (person === "侯宇帆") {
     Game.flags.houTalk = true;
+    startCharacterTalking(person);
     const lines = {
       "智恵蔵のこと": Game.flags.houChieTalk ? "「そんな、智恵さんが……」" : "侯くん「智恵さんがどうしたの？え！！？死んでる！？？」\n月岡「智恵蔵が死んでるのを見つけたんだ」",
       "侯宇帆のこと": Game.flags.houSelfTalk ? "「なんで何度も聞くの、ぼくのこと疑ってるの？」" : "ぼく？ぼくはここでシルクの授業準備をしていたよ",
@@ -372,7 +429,7 @@ function talkPerson(person, topic) {
     };
     if (topic === "智恵蔵のこと") Game.flags.houChieTalk = true;
     if (topic === "侯宇帆のこと") Game.flags.houSelfTalk = true;
-    showText(lines[topic]);
+    showText(lines[topic], null, stopCharacterTalking);
     checkKimura();
     return;
   }
@@ -383,20 +440,21 @@ function talkPerson(person, topic) {
     checkKimura();
     return;
   }
+  startCharacterTalking(person);
   if (topic === "智恵蔵のこと") {
     if (!Game.flags.kimuraReady) {
       Game.flags.kimuraReady = true;
-      return showText("月岡「智恵蔵が死んだんだ」\n木村「！！！…………………………」");
+      return showText("月岡「智恵蔵が死んだんだ」\n木村「！！！…………………………」", null, stopCharacterTalking);
     }
-    return showText("月岡「何か、見たのか？」\n木村「智恵先生、ずっと何か調べてました……」\n月岡「何を調べていた？」\n木村「そこまでは……でも誰かを疑っているようでした」");
+    return showText("月岡「何か、見たのか？」\n木村「智恵先生、ずっと何か調べてました……」\n月岡「何を調べていた？」\n木村「そこまでは……でも誰かを疑っているようでした」", null, stopCharacterTalking);
   }
   if (topic === "関澤のこと" && Game.flags.kimuraReady) {
     Game.flags.kimuraTestimony = true;
-    showText("木村「関澤くん、さっき智恵先生と一緒にいたんです」\n月岡「どういうことだ？」\n木村「智恵先生が関澤くんを904に呼び出していて……」\n木村「心配でこっそりついて行ったんです。関澤くん、また何かやらかしたのかと思って……そこでふたりが言い争っているのを聞いてしまって」\n木村「目があったんです……関澤くんと、すごい怖い顔してて……それで怖くて逃げてしまいました」\n月岡「そういうことだったのか……」\n関澤を追求しなくては！");
+    showText("木村「関澤くん、さっき智恵先生と一緒にいたんです」\n月岡「どういうことだ？」\n木村「智恵先生が関澤くんを904に呼び出していて……」\n木村「心配でこっそりついて行ったんです。関澤くん、また何かやらかしたのかと思って……そこでふたりが言い争っているのを聞いてしまって」\n木村「目があったんです……関澤くんと、すごい怖い顔してて……それで怖くて逃げてしまいました」\n月岡「そういうことだったのか……」\n関澤を追求しなくては！", null, stopCharacterTalking);
   } else if (topic === "木村のこと") {
-    showText("月岡「どこに行ってたんだ？心配したんだぞ」\n木村「…………………………」");
+    showText("月岡「どこに行ってたんだ？心配したんだぞ」\n木村「…………………………」", null, stopCharacterTalking);
   } else {
-    showText("木村「…………………………」");
+    showText("木村「…………………………」", null, stopCharacterTalking);
   }
   updateAccuseCommand();
 }
@@ -467,7 +525,7 @@ function showMenu() {
   if (!people.length) return showText(Game.place === "学生ホール" ? "ここにはみせる相手がいない……" : "みせる相手がいない。");
   if (!Game.inventory.length) return showText("みせる相手がいない。");
   showChoices("何を見せますか？", people.flatMap((person) => Game.inventory.map((item) => ({
-    label: `${person}：${item}`,
+    label: item,
     action: () => showItem(person, item)
   }))));
 }
@@ -476,28 +534,33 @@ function showItem(person, item) {
   if (person === "侯宇帆" && item === "血の付いたカッター") {
     Game.flags.houShown = true;
     checkKimura();
-    return showText("侯くん「血がついてる！……そのカッター801で使ってるやつだよね」");
+    startCharacterTalking(person);
+    return showText("侯くん「血がついてる！……そのカッター801で使ってるやつだよね」", null, stopCharacterTalking);
   }
   if (person === "侯宇帆" && item === "赤いUSBメモリ") {
-    return showText("侯くん「見覚えないなあ」");
+    startCharacterTalking(person);
+    return showText("侯くん「見覚えないなあ」", null, stopCharacterTalking);
   }
   if (person === "関澤遼") {
     Game.flags.sekizawaShown = true;
     checkKimura();
-    startSekizawaTalking();
+    startCharacterTalking(person);
     if (Game.flags.kimuraTestimony) {
-      return showText("関澤「僕は何も知りません」", null, stopSekizawaTalking);
+      return showText("関澤「僕は何も知りません」", null, stopCharacterTalking);
     }
     if (item === "赤いUSBメモリ") {
-      const line = Game.flags.sekizawaUsbShown ? "関澤「……………………………」" : "関澤「それ！……なんですかね」";
+      const line = Game.flags.sekizawaUsbShown ? "関澤「……………………………」" : "関澤「！！それ……なんですかね、僕は知りません…」";
       Game.flags.sekizawaUsbShown = true;
-      return showText(line, null, stopSekizawaTalking);
+      return showText(line, null, stopCharacterTalking);
     }
     const line = Game.flags.sekizawaCutterShown ? "すみません、みたくないです。血が苦手なので……" : "関澤「それって……凶器ですか……？」";
     Game.flags.sekizawaCutterShown = true;
-    return showText(line, null, stopSekizawaTalking);
+    return showText(line, null, stopCharacterTalking);
   }
-  if (person === "木村友紀子") return showText(item === "赤いUSBメモリ" ? "木村「それ、智恵先生のUSBです」" : "木村「！！！それは……」");
+  if (person === "木村友紀子") {
+    startCharacterTalking(person);
+    return showText(item === "赤いUSBメモリ" ? "木村「それ、智恵先生のUSBです」" : "木村「！！！それは……」", null, stopCharacterTalking);
+  }
   showText("通行人「ん？なんですか？それ？」");
 }
 
@@ -517,7 +580,7 @@ function findMenu() {
 function findTarget(target) {
   const place = Game.place;
   const locations = {
-    "田中先生": "904で殺されている。",
+    "智恵蔵": "904で無惨な姿になっている……",
     "侯くん": place === "901シルク室" ? "目の前にいる。田中先生のことを聞いて不安そうだ。" : "シルク室にいる。",
     "関澤": place === "801教室" ? "目の前にいる。智恵蔵が死んだからか、どこかそわそわしている。" : "801教室にいる。",
     "木村": Game.flags.kimuraUnlocked && place === "学生ホール" ? "ひとまず無事のようだが、ひどく怯えている。" : "しばらく木村を見ていない。帰ってはいないはずだが……",
@@ -527,14 +590,18 @@ function findTarget(target) {
 }
 
 function readUsb() {
+  showText("智恵蔵のPCに赤いUSBを接続した", requestUsbPassword);
+}
+
+function requestUsbPassword() {
   const password = window.prompt("パスワード4桁の入力画面が出現。");
   if (password === null) return;
   if (password !== "カメムシ") {
-    showText("エラー", () => readUsb());
+    showText("エラー", requestUsbPassword);
     return;
   }
   Game.flags.usbRead = true;
-  showText("赤いUSBを接続した。\nパスワード？\n月岡「これは……」\nそこには学科の予算書の帳簿が入っていた。\n過去3年分の発注書や請求書のデータが格納されている。\n月岡「どういうことだ？」\nそこに記載された金額には明かな違和感があった。\n月岡「金額が明らかに水増しされている…これは裏帳簿、発注担当者の名前は全て関澤だ！」\n関澤の過去3年に及ぶ横領の証拠を見つけた！\n月岡「動機はこれに違いない！」\n関澤をこくはつしよう。");
+  showText("月岡「これは……」\nそこには学科の予算書の帳簿が入っていた。\n過去3年分の発注書や請求書のデータが格納されている。\n月岡「どういうことだ？」\nそこに記載された金額には明かな違和感があった。\n月岡「金額が明らかに水増しされている…これは裏帳簿、発注担当者の名前は全て関澤だ！」\n関澤の過去3年に及ぶ横領の証拠を見つけた！\n月岡「動機はこれに違いない！」\n関澤をこくはつしよう。");
   updateAccuseCommand();
 }
 
@@ -552,8 +619,8 @@ function updateAccuseCommand() {
 function accuse() {
   if (Game.place !== "801教室") return showText("関澤をこくはつしよう");
   if (!Game.flags.usbRead) return showText("こくはつするにはまだ証拠がない。職員室で証拠を調べよう");
-  startSekizawaTalking();
-  showText("月岡「お前が智恵蔵を殺したんだなっ」\n月岡「証拠は見つけた。この横領の裏帳簿、これが動機だあっ」\n関澤「……」\n関澤は諦めた様子で語り出した。\n関澤「……801教室でハレパネを切る作業をしていた時に智恵先生に呼び出されました」\n関澤「その時カッターを持ったまま904教室に行ったんです」\n関澤「殺すつもりはなかったんです……」\n関澤「……智恵先生に裏帳簿のことがバレて」\n関澤「もう訳がわからなくて、気がついたら……」\n関澤「智恵先生が目の前で倒れていました……」\n月岡「お前、その後801にいたのはこれを探していたからだな？」\n赤いUSBを関澤に突きつけた\n月岡「智恵蔵を殺したあげくに横領の証拠を隠滅しようとしていたんだっ」\n月岡「お前は救いのないことをした……この馬鹿野郎がっ！」\n関澤はもうしゃべることなくただうなだれてれていた。\n遠くからパトカーのサイレンが聞こえる。\nこうして、一夜の事件は関澤の逮捕によって幕を閉じた", showCredits, stopSekizawaTalking);
+  startCharacterTalking("関澤遼");
+  showText("月岡「お前が智恵蔵を殺したんだなっ」\n月岡「証拠は見つけた。この横領の裏帳簿、これが動機だあっ」\n関澤「……」\n関澤は諦めた様子で語り出した。\n関澤「……801教室でハレパネを切る作業をしていた時に智恵先生に呼び出されました」\n関澤「その時カッターを持ったまま904教室に行ったんです」\n関澤「殺すつもりはなかったんです……」\n関澤「……智恵先生に裏帳簿のことがバレて」\n関澤「もう訳がわからなくて、気がついたら……」\n関澤「智恵先生が目の前で倒れていました……」\n月岡「お前、その後801にいたのはこれを探していたからだな？」\n赤いUSBを関澤に突きつけた\n月岡「智恵蔵を殺したあげくに横領の証拠を隠滅しようとしていたんだっ」\n月岡「お前は救いのないことをした……この馬鹿野郎がっ！」\n関澤はもうしゃべることなくただうなだれてれていた。\n遠くからパトカーのサイレンが聞こえる。\nこうして、一夜の事件は関澤の逮捕によって幕を閉じた", showCredits, stopCharacterTalking);
 }
 
 function showCredits() {
@@ -564,6 +631,7 @@ function showCredits() {
 function startGame() {
   if (Game.started) return;
   Game.started = true;
+  stopTitleBgm();
   document.getElementById("title").style.display = "none";
   document.getElementById("screen").style.display = "block";
   updatePlace();
@@ -576,25 +644,13 @@ function startGame() {
 document.addEventListener("DOMContentLoaded", () => {
   const title = document.getElementById("title");
   const startButton = document.querySelector(".start");
-  const bgmButton = document.querySelector(".bgmToggle");
+  startTitleBgm();
+  title.addEventListener("click", (event) => {
+    if (event.target !== startButton) startTitleBgm();
+  });
   startButton.addEventListener("click", () => {
-    bgmEnabled = true;
     startGame();
   });
-  bgmButton.addEventListener("click", () => {
-    bgmEnabled = !bgmEnabled;
-    updateBgmButton();
-    if (bgmEnabled) startBgm(Game.started ? "game" : "title");
-    else stopBgm();
-  });
-  title.addEventListener("click", (event) => {
-    if (event.target === title) {
-      bgmEnabled = true;
-      updateBgmButton();
-      startBgm("title");
-    }
-  });
-  updateBgmButton();
   renderCommandList();
   message().addEventListener("click", () => {
     if (typing) return;
