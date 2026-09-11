@@ -644,10 +644,12 @@ function startGame() {
 document.addEventListener("DOMContentLoaded", () => {
   const title = document.getElementById("title");
   const startButton = document.querySelector(".start");
+  const enableTitleBgm = () => startTitleBgm();
+
+  // 自動再生を許可しないブラウザでも、最初の操作では必ず音を有効化する。
   startTitleBgm();
-  title.addEventListener("click", (event) => {
-    if (event.target !== startButton) startTitleBgm();
-  });
+  title.addEventListener("pointerdown", enableTitleBgm);
+  document.addEventListener("keydown", enableTitleBgm, { once: true });
   startButton.addEventListener("click", () => {
     startGame();
   });
